@@ -3,6 +3,7 @@ use futures_timer::Delay;
 use futures::executor::block_on;
 use futures::future::FutureExt;
 use futures::future;
+use std::slice;
 
 // TODO
 // チェックサムの計算方法
@@ -15,7 +16,6 @@ use futures::future;
 
 // {06d7}{ID} {0120}{QR ~ RCODE, RD 1 なのでフルサービスリゾルバへの問い合わせ, AD 1 なので AD 理解できる} {0001}:{Q の数 1} {0000}:{A の数 0} {0000}:{NS の数 0} {0001}:{AR の数 1}
 // {0667 6f6f 676c 65}:{6 + google}, {02 636f}:{2 + co}, {026a 70}:{2 + jp} {00}:{終了} {0001}:{タイプ1, A レコードなので} {0001}:{クラス 1, インターネットなので} {0000 2910 0000 0000 0000 00}:{謎, Additonal section のなにか}
-// 
 
 // 15:52:29.871516 IP 10.128.128.128.53 > 10.230.26.56.58836: 1751 1/0/1 A 172.217.25.67 (57)
 //         0x0000:  38f9 d363 06cf e0cb bc88 3b18 0800 4500  8..c......;...E.
@@ -25,6 +25,68 @@ use futures::future;
 //         0x0040:  026a 7000 0001 0001 c00c 0001 0001 0000  .jp.............
 //         0x0050:  0114 0004 acd9 1943 0000 2910 0000 0000  .......C..).....
 //         0x0060:  0000 00                                  ...
+
+#[repr(C)]
+struct DnsResolver {
+  id: u16,
+  qr: u16,
+  cq: u16,
+  ca: u16,
+  cns: u16,
+  cad: u16,
+  t: u16,
+  class: u16,
+  query: Vec<u8>,
+}
+
+impl DnsResolver {
+  fn new(domain: String) -> Self {
+    let mut query = domain.into_bytes(); // .google.co.jp.
+    let mut pin = 0;
+    let mut count = 1;
+    while (pin + count) < query.len() {
+      if query[pin + count] == 0x2e {
+        query[pin + count] = 0;
+        query[pin] = (count-1) as u8;
+        pin += count;
+        count = 1;
+      } else {
+        count += 1;
+      }
+      if (count > 255) { panic!("name length > 255"); }
+    }
+    query[pin + count - 1] = 0;
+    Self {
+      id: rand::random::<u16>(),
+      qr: 0x120,
+      cq: 0x1,
+      ca: 0x0,
+      cns: 0x0,
+      cad: 0x0,
+      query: query,
+      t: 0x1,
+      class: 0x1,
+    }
+  }
+  fn as_u8(&self) -> Vec<u8> {
+    let mut ptr = (self as *const Self) as *const u16;
+    let mut query = self.query.to_owned();
+    let mut vec = vec![];
+    let slice: &[u16] = unsafe { slice::from_raw_parts(ptr, 8) }; // TODO
+    for (i, u) in slice.iter().enumerate() {
+      if i == 6 {
+        vec.append(&mut query);
+      }
+      let v = *u;
+      vec.push((v >> 8) as u8);
+      vec.push((v & 0xff) as u8);
+    }
+    vec
+  }
+  fn hex(&self) -> String {
+    self.as_u8().iter().map(|x| { format!("{:02x}", x) }).collect::<String>()
+  }
+}
 
 async fn job((i, u): &(usize, usize)) -> usize {
   println!("begin {:?} => {:?}", i, u);
@@ -56,6 +118,8 @@ async fn run() {
 }
 
 fn main() -> () {
-  block_on(run());
+  //block_on(run());
+  let v = DnsResolver::new(".google.co.jp.".to_string());
+  println!("{}", v.hex());
 }
 
