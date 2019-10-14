@@ -8,3 +8,5 @@ edition = "2018"
 
 [dependencies]
 futures-preview = { version = "=0.3.0-alpha.17", features = ["compat"] }
+futures-timer = "0.*"
+rand = "0.7.2"
