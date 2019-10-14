@@ -39,10 +39,12 @@ struct DnsResolver {
   t: u16,
   class: u16,
   query: Vec<u8>,
+  domain: String, // 非効率だが
 }
 
 impl DnsResolver {
   fn new(domain: String) -> Self {
+    let _domain = domain.clone()[1..(domain.len()-1)].to_string();
     let mut query = domain.into_bytes(); // .google.co.jp.
     let mut pin = 0;
     let mut count = 1;
@@ -66,15 +68,17 @@ impl DnsResolver {
       cns: 0x0,
       cad: 0x0,
       query: query,
+      domain: _domain,
       t: 0x1,
       class: 0x1,
     }
   }
+  // TODO: メモリレイアウト依存
   fn as_u8(&self) -> Vec<u8> {
     let mut ptr = (self as *const Self) as *const u16;
     let mut query = self.query.to_owned();
     let mut vec = vec![];
-    let slice: &[u16] = unsafe { slice::from_raw_parts(ptr, 8) }; // TODO
+    let slice: &[u16] = unsafe { slice::from_raw_parts(ptr, 8) }; // TODO: メモリ
     for (i, u) in slice.iter().enumerate() {
       if i == 6 {
         vec.append(&mut query);
@@ -120,15 +124,29 @@ async fn run() {
 }
 
 async fn udp_client() {  
-  let remote_addr: SocketAddr = "127.0.0.1:8080".parse().unwrap();
+  let remote_addr: SocketAddr = "8.8.8.8:53".parse().unwrap();
   let local_addr: SocketAddr = "0.0.0.0:0".parse().unwrap();
   let mut socket = UdpSocket::bind(local_addr).await.unwrap();
+  const MAX_DATAGRAM_SIZE: usize = 65_507;
+  socket.connect(&remote_addr).await.unwrap();
+  let dns_client = DnsResolver::new(".google.co.jp.".to_string());
+  let data = dns_client.as_u8();
+  socket.send(&data).await.unwrap();
+  let mut data = vec![0u8; MAX_DATAGRAM_SIZE];
+  let len = socket.recv(&mut data).await.unwrap();
+  let mut ipaddr = data[(len-4)..len]
+    .to_owned()
+    .iter()
+    .map(|x| { x.to_string() })
+    .collect::<Vec<String>>()
+    .connect(".");
+  println!("{:?} => {:?}", dns_client.domain, ipaddr);
+  println!("Received {} bytes:\n{:?}", len, &data[..len]);
 }
 
 #[tokio::main]
 async fn main() -> () {
   //block_on(run());
-  // let v = DnsResolver::new(".google.co.jp.".to_string());
   // println!("{}", v.hex());
-  udp_client();
+  udp_client().await;
 }
