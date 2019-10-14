@@ -1,32 +1,35 @@
-use std::{thread, time};
 use std::time::Duration;
 use futures_timer::Delay;
 use futures::executor::block_on;
 use futures::future::FutureExt;
 use futures::future;
-use rand::prelude::*;
 
-async fn send((i, u): (usize, usize)) -> usize {
+async fn job((i, u): &(usize, usize)) -> usize {
   println!("begin {:?} => {:?}", i, u);
-  Delay::new(Duration::from_secs(u as u64)).await;
+  Delay::new(Duration::from_secs(*u as u64)).await;
   println!("end {:?} => {:?}", i, u);
-  i
+  *i
+}
+
+async fn executor(i: usize, requests: &[(usize, usize)]) -> Vec<usize> {
+  let mut vec = vec![];
+  println!("id: {:?}", i);
+  for request in requests.iter() {
+    vec.push(job(request).await)
+  }
+  vec
 }
 
 async fn run() {
   let mut durations = vec![];
   let mut futures = vec![];
-  let mut v = &0 as *const i32 as usize;
   for i in 0..30 {
-    v = rand::random::<usize>() % 10;
-    durations.push((i, v));
+    durations.push((i, rand::random::<usize>() % 10));
   }
-  while durations.len() > 0 {
-    // if futures.len() > 3 {
-    //   future::select_all(futures);
-    // } else {
-      futures.push(send(durations.pop().unwrap()).boxed());
-    // }
+  let Pool = 10;
+  let requests_chunk = durations.chunks(durations.len() / Pool);
+  for (i, requests) in requests_chunk.enumerate() {
+    futures.push(executor(i, requests).boxed());
   }
   future::join_all(futures).await;
 }
