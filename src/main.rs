@@ -33,7 +33,7 @@ async fn job((i, u): &(usize, usize)) -> usize {
   *i
 }
 
-async fn executor(i: usize, requests: &[(usize, usize)]) -> Vec<usize> {
+async fn dispatch(i: usize, requests: &[(usize, usize)]) -> Vec<usize> {
   let mut vec = vec![];
   println!("id: {:?}", i);
   for request in requests.iter() {
@@ -51,7 +51,7 @@ async fn run() {
   let Pool = 10;
   let requests_chunk = durations.chunks(durations.len() / Pool);
   for (i, requests) in requests_chunk.enumerate() {
-    futures.push(executor(i, requests).boxed());
+    futures.push(dispatch(i, requests).boxed());
   }
   future::join_all(futures).await;
 }
