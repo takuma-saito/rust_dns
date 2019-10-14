@@ -4,6 +4,8 @@ use futures::executor::block_on;
 use futures::future::FutureExt;
 use futures::future;
 use std::slice;
+use tokio::net::UdpSocket;
+use std::net::SocketAddr;
 
 // TODO
 // チェックサムの計算方法
@@ -117,9 +119,16 @@ async fn run() {
   future::join_all(futures).await;
 }
 
-fn main() -> () {
-  //block_on(run());
-  let v = DnsResolver::new(".google.co.jp.".to_string());
-  println!("{}", v.hex());
+async fn udp_client() {  
+  let remote_addr: SocketAddr = "127.0.0.1:8080".parse().unwrap();
+  let local_addr: SocketAddr = "0.0.0.0:0".parse().unwrap();
+  let mut socket = UdpSocket::bind(local_addr).await.unwrap();
 }
 
+#[tokio::main]
+async fn main() -> () {
+  //block_on(run());
+  // let v = DnsResolver::new(".google.co.jp.".to_string());
+  // println!("{}", v.hex());
+  udp_client();
+}
